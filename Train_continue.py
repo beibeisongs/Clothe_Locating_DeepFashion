@@ -84,24 +84,14 @@ def __data_label__(path):
         >>>__data_label__(path='./list_landmarks.txt')
 """
 
-
 from keras.applications import VGG16
 from keras.models import Model
 from keras.layers import Dense
 from keras import optimizers
 
+from keras.models import load_model
+model = load_model('Clothe_Locating_12points.h5')
 
-model = VGG16(weights='vgg16_weights_tf_dim_ordering_tf_kernels.h5', include_top=True)
-
-model.layers.pop()
-model.layers.pop()
-model.layers.pop()
-
-model.outputs = [model.layers[-1].output]
-x = Dense(256, activation='relu')(model.layers[-1].output)
-x = Dense(12, activation='softmax')(x)
-
-model = Model(model.input, x)
 for i in range(len(model.layers)):
     if i <= 10:
         model.layers[i].trainable = False
