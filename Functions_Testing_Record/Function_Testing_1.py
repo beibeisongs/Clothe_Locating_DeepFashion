@@ -1,131 +1,132 @@
 # encoding=utf-8
 # Date: 2018-10-24
-# Author: MJUZY
+# Reference:
+#   www.cnblogs.com/ansang/p/8583122.html
 
 
-import cv2
+from tensorflow.contrib.keras.api.keras.preprocessing.image import ImageDataGenerator, img_to_array
+from keras.models import Sequential
+from keras.layers.core import Dense, Dropout, Activation, Flatten
+from keras.layers.advanced_activations import PReLU
+from keras.layers.convolutional import Conv2D, MaxPooling2D, ZeroPadding2D
 from keras.preprocessing.image import load_img, img_to_array
-import matplotlib.pyplot as plt
+from keras.optimizers import SGD
 import numpy as np
-import skimage.io as io
-import skimage.transform as transform
+import cv2
+from keras.callbacks import *
+import keras
+
+FILE_PATH = 'E:\\pycode\\facial-keypoints-master\\code\\CNN_model_final.h5'
+trainpath = 'E:/pycode/facial-keypoints-master/data/50000train/'
+testpath = 'E:/pycode/facial-keypoints-master/data/50000test/'
+imgsize = 178
+train_samples = 40000
+test_samples = 200
+batch_size = 32
 
 
 def __data_label__(path):
-    f = open(path, "r")
-    line_i = 0
-    for line in f.readlines():
+    f = open(path + "lable-40.txt", "r")
+    j = 0
+    i = -1
+    datalist = []
+    labellist = []
+    while True:
 
-        if 2 <= line_i <= 30000:  # Note:
-            #   'img/Sheer_Pleated-Front_Blouse/img_00000001.jpg                         1  0 146 102  0 173 095  0 094 242  0 205 255  0 136 229  0 177 232 '
-
-            step_1 = line.replace("\n", "")
-            step_2 = step_1.split(" ")
-
-            img_Relative_path = step_2[0]
-            img_RePath_parts = img_Relative_path.split('/')
-            img_name = img_RePath_parts[2]
-            clothe_type = img_RePath_parts[1]
-            img_whole_path = "D:/Dataset：DeepFashion/img_small/" + clothe_type + '/' + img_name
-
-            images = load_img(img_whole_path)
+        for line in f.readlines():
+            i += 1
+            j += 1
+            a = line.replace("\n", "")
+            b = a.split(",")
+            lable = b[1:]
+            # print(b[1:])
+            # 对标签进行归一化（不归一化也行）
+            #  for num in b[1:]:
+            #     lab = int(num) / 255.0
+            #     labellist.append(lab)
+            # lab = labellist[i * 10:j * 10]
+            imgname = path + b[0]
+            images = load_img(imgname)
             images = img_to_array(images).astype('float32')
+            # 对图片进行归一化（不归一化也行）
+            # images /= 255.0
             image = np.expand_dims(images, axis=0)
-
-            lable = [int(step_2[28]), int(step_2[29]), int(step_2[32]), int(step_2[33]), int(step_2[36]),
-                     int(step_2[37]), int(step_2[40]), int(step_2[41]), int(step_2[44]), int(step_2[45]),
-                     int(step_2[48]), int(step_2[49])]
             lables = np.array(lable)
-            lables = lables.reshape(1, 12)
 
-            yield (image, lables)
+            # lable = keras.utils.np_utils.to_categorical(lable)
+            # lable = np.expand_dims(lable, axis=0)
+            lable = lables.reshape(1, 10)
 
-        line_i += 1
+            yield (image,lable)
+
+###############:
+# 开始建立CNN模型
+###############
+
+# 生成一个model
+class Model(object):
+    def __CNN__(self):
+        model = Sequential()#218*178*3
+        model.add(Conv2D(32, (3, 3), input_shape=(imgsize, imgsize, 3)))
+        model.add(Activation('relu'))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+
+        model.add(Conv2D(32, (3, 3)))
+        model.add(Activation('relu'))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+
+        model.add(Conv2D(64, (3, 3)))
+        model.add(Activation('relu'))
+        model.add(MaxPooling2D(pool_size=(2, 2)))
+
+        model.add(Flatten())
+        model.add(Dense(64))
+        model.add(Activation('relu'))
+        model.add(Dropout(0.5))
+        model.add(Dense(10))
+        model.summary()
+        return model
 
 
-def show_points(x, y, img):
-    cv2.circle(img, (x, y), 1, (0, 0, 255), 10)
+    def train(self,model):
+        # print(lable.shape)
+        model.compile(loss='mse', optimizer='adam', metrics=['accuracy'])
+        # optimizer = SGD(lr=0.03, momentum=0.9, nesterov=True)
+        # model.compile(loss='mse', optimizer=optimizer, metrics=['accuracy'])
+        epoch_num = 10
+        learning_rate = np.linspace(0.03, 0.01, epoch_num)
+        change_lr = LearningRateScheduler(lambda epoch: float(learning_rate[epoch]))
+        early_stop = EarlyStopping(monitor='val_loss', patience=20, verbose=1, mode='auto')
+        check_point = ModelCheckpoint('CNN_model_final.h5', monitor='val_loss', verbose=0, save_best_only=True,
+                                      save_weights_only=False, mode='auto', period=1)
 
+        model.fit_generator(__data_label__(trainpath), callbacks=[check_point, early_stop, change_lr],
+                            samples_per_epoch=int(train_samples // batch_size),
+                            epochs=epoch_num,
+                            validation_steps=int(test_samples // batch_size),
+                            validation_data=__data_label__(testpath))
 
-def adjust_landmarks(shape_y, shape_x, mark_x, mark_y):
-    center_x = shape_x / 2  # Note: 150.0
-    center_y = shape_y / 2  # Note: 102.5
+        # model.fit(traindata, trainlabel, batch_size=32, epochs=50,
+        #           validation_data=(testdata, testlabel))
+        model.evaluate_generator(__data_label__(testpath))
 
-    landmark_x = int(mark_x)  # Note: 107
-    landmark_y = int(mark_y)  # Note: 67
+    def save(self, model, file_path=FILE_PATH):
+        print('Model Saved.')
+        model.save_weights(file_path)
 
-    prop_x = 224 / shape_x  # Note: Proportion for x adjusting  0.7466666666666667
-    prop_y = 224 / shape_y  # Note: Proportion for y adjusting  1.0926829268292684
+    def load(self, model, file_path=FILE_PATH):
+        print('Model Loaded.')
+        model.load_weights(file_path)
 
-    new_x = int(112 + (landmark_x - center_x) * prop_x)     # Note: 79
-    new_y = int(112 + (landmark_y - center_y) * prop_y)     # Note: 73
+    def predict(self, model, image):
+        # 预测样本分类
+        print(image.shape)
+        image = cv2.resize(image, (imgsize, imgsize))
+        image.astype('float32')
+        image = np.expand_dims(image, axis=0)
 
-    return new_x, new_y
+        # 归一化
+        result = model.predict(image)
 
-
-path = './list_landmarks.txt'
-f = open(path, "r")
-line_i = 0
-for line in f.readlines():
-
-    if 2 <= line_i <= 30000:    # Note:
-                                #   'img/Sheer_Pleated-Front_Blouse/img_00000001.jpg                         1  0 146 102  0 173 095  0 094 242  0 205 255  0 136 229  0 177 232 '
-
-        step_1 = line.replace("\n", "")
-        step_2 = step_1.split(" ")
-
-        img_Relative_path = step_2[0]
-        img_RePath_parts = img_Relative_path.split('/')
-        img_name = img_RePath_parts[2]
-        clothe_type = img_RePath_parts[1]
-        img_whole_path = "D:/Dataset_DeepFashion/img_small/" + clothe_type + '/' + img_name
-
-        img = cv2.imread(img_whole_path)
-
-        images = load_img(img_whole_path)
-        images = img_to_array(images).astype('float32')
-        image = np.expand_dims(images, axis=0)  # Note: image.shape = <class 'tuple'>: (1, 300, 300, 3)
-        #   This means that you should train 1 picture per step, as the first dimension of the shape is 1
-        #   But, to be exact
-        #       We will train the picture in the input format of size (224, 224, 3)
-        #       So we should resize the picture and the landmarks
-        #
-        #       Now let's start to adjust the landmarks
-        new_x1, new_y1 = adjust_landmarks(images.shape[0], images.shape[1], step_2[28], step_2[29])
-        new_x2, new_y2 = adjust_landmarks(images.shape[0], images.shape[1], step_2[32], step_2[33])
-        new_x3, new_y3 = adjust_landmarks(images.shape[0], images.shape[1], step_2[36], step_2[37])
-        new_x4, new_y4 = adjust_landmarks(images.shape[0], images.shape[1], step_2[40], step_2[41])
-        new_x5, new_y5 = adjust_landmarks(images.shape[0], images.shape[1], step_2[44], step_2[45])
-        new_x6, new_y6 = adjust_landmarks(images.shape[0], images.shape[1], step_2[48], step_2[49])
-        shrink = cv2.resize(img, (224, 224))    # Note: ', interpolation=cv2.INTER_AREA'
-        # show_points(new_x1, new_y1, shrink)
-        # show_points(new_x2, new_y2, shrink)
-        # show_points(new_x3, new_y3, shrink)
-        # show_points(new_x4, new_y4, shrink)
-        show_points(new_x5, new_y5, shrink)
-        show_points(new_x6, new_y6, shrink)
-        cv2.imshow("Shrink", shrink)
-
-        # img_io = io.imread(img_whole_path)
-        # img_tr = transform.resize(img_io, (224, 224))
-        # plt.figure("resize")
-        # plt.title("resize")
-        # plt.imshow(img_tr)
-        # plt.show()
-
-        lable = [int(step_2[28]), int(step_2[29]), int(step_2[32]), int(step_2[33]), int(step_2[36]),
-                 int(step_2[37]), int(step_2[40]), int(step_2[41]), int(step_2[44]), int(step_2[45]),
-                 int(step_2[48]), int(step_2[49])]
-
-        show_points(int(step_2[28]), int(step_2[29]), img)
-        show_points(int(step_2[32]), int(step_2[33]), img)
-        show_points(int(step_2[36]), int(step_2[37]), img)
-        show_points(int(step_2[40]), int(step_2[41]), img)
-        show_points(int(step_2[44]), int(step_2[45]), img)
-        show_points(int(step_2[48]), int(step_2[49]), img)
-
-        cv2.imshow("Image", img)
-
-    line_i += 1
-
-__data_label__(path='./list_landmarks.txt')
+        print(result)
+        return result
