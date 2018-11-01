@@ -5,22 +5,14 @@
 
 import cv2
 from keras.models import load_model
+import numpy as np
 
 
 def show_points(x, y, im):
     cv2.circle(im, (x, y), 1, (0, 0, 255), 10)
 
 
-model = load_model('Clothe_Locating_12points.h5')
-model.summary()
-
-
-import numpy as np
-
-
-img_path = "D:/Dataset_DeepFashion/img_small/" + "Sheer_Woven_Blouse/img_00000025.jpg"
-
-def __data_label__():
+def showPrediction(img_path):
 
         img_ori = cv2.imread(img_path)
 
@@ -39,5 +31,11 @@ def __data_label__():
         show_points(int(content[8]), int(content[9]), images)
         show_points(int(content[10]), int(content[11]), images)
         cv2.imshow("224^2_Images", images)
+        cv2.waitKey(0)
 
-__data_label__()
+
+model = load_model('Clothe_Locating_12points.h5')
+model.summary()
+
+img_path = "D:/Dataset_DeepFashion/img_small/" + "Sheer_Woven_Blouse/img_00000101.jpg"
+showPrediction(img_path)
